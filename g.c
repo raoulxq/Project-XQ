@@ -645,7 +645,7 @@ void gen_world()
                 block = rxrand(0x20);
                 if (block>=0x1e) block=0xff; /* empty space */
                 else if (block>=0x11) block=0x11; /* disproportional amount of rock */
-                if (block > 3) block = ID_EMPTY;
+                if (block > 0x07) block = ID_EMPTY;
                 putat(x, y, z, block);
 //                 fprintf(stderr, "x=%d, y=%d, z=%d, block=%d\n", x, y, z, block);
             }
@@ -704,8 +704,12 @@ void init_display_lists() {
 #define ID_EMPTY        0xff
 
 #define CGUI            0xf0f0f0
-#define CSOIL_DRY       (97*256+52*16+49)
-#define CSOIL_WET       (78*256+73*16+68)
+//#define CSOIL_DRY       (97*256+52*16+49)
+// Sienna #define CSOIL_DRY       0xA0522D
+#define CSOIL_DRY       0x800000 // Maroon
+//#define CSOIL_WET       (78*256+73*16+68)
+// Saddle brown
+#define CSOIL_WET       0x8B4513
     list_blocks = glGenLists(256);
     int l=list_blocks;
 
@@ -713,6 +717,11 @@ void init_display_lists() {
     glNewList(l+ID_SOIL_DRY_MIN+1, GL_COMPILE); cube_right_height(CSOIL_DRY, 0.50); glEndList();
     glNewList(l+ID_SOIL_DRY_MIN+2, GL_COMPILE); cube_right_height(CSOIL_DRY, 0.75); glEndList();
     glNewList(l+ID_SOIL_DRY_MIN+3, GL_COMPILE); cube_right       (CSOIL_DRY      ); glEndList();
+
+    glNewList(l+ID_SOIL_WET_MIN  , GL_COMPILE); cube_right_height(CSOIL_WET, 0.25); glEndList();
+    glNewList(l+ID_SOIL_WET_MIN+1, GL_COMPILE); cube_right_height(CSOIL_WET, 0.50); glEndList();
+    glNewList(l+ID_SOIL_WET_MIN+2, GL_COMPILE); cube_right_height(CSOIL_WET, 0.75); glEndList();
+    glNewList(l+ID_SOIL_WET_MIN+3, GL_COMPILE); cube_right       (CSOIL_WET      ); glEndList();
 
     glNewList(l+ID_EMPTY         , GL_COMPILE); glTranslatef( 1., 0., 0. );         glEndList();
 }
