@@ -403,6 +403,10 @@ Sint32 init_gfx(int argc, char * argv[])
     glCullFace( GL_BACK );
     glFrontFace( GL_CCW );
     glEnable( GL_CULL_FACE );
+    // I believe anti aliasing is already set in the video driver on HD5870, 
+    // I don't see a difference and it seems to be anti-aliased already.
+    glEnable( GL_LINE_SMOOTH );
+    glEnable( GL_BLEND );
 
     /* Light */
     GLfloat mats_specular [] = {1.0, 1.0,  1.0, 1.0}; glMaterialfv(GL_FRONT , GL_SPECULAR , mats_specular);
@@ -434,12 +438,18 @@ void cube_right(int color)
 void cube_right_height(int color, GLfloat height) 
 {
     glPushMatrix();
-    glScalef(1.,1.,0.25);
+
+    glTranslatef(0.,0.,(height-1)/2.);
+    glScalef(1., 1., height);
+
     glColor3ub(color/65536, (color/256)&255, color&255);
     glutSolidCube(.95);
+
     glColor3ub(128, 128, 128);
     glutWireCube(.95);
+
     glPopMatrix();
+
     glTranslatef( 1., 0., 0. );
 }
 
@@ -629,14 +639,12 @@ void gen_world()
     // World generation!
     Sint32 x=0,y=0,z=0;
     Uint8  block;
-    Sint32 i;
     for (z=0; z<sizez; z++) {
         for (y=0; y<sizey; y++) {
             for (x=0; x<sizex; x++) {
-                i = rxrand(0x20);
-                if (i>=0x1e) block=0xff; /* empty space */
-                else if (i>=0x11) block=0x11; /* disproportional amount of rock */
-                else block=i; /* a lot of water too, because it has a chance of more than 8 out of 32 */
+                block = rxrand(0x20);
+                if (block>=0x1e) block=0xff; /* empty space */
+                else if (block>=0x11) block=0x11; /* disproportional amount of rock */
                 if (block > 3) block = ID_EMPTY;
                 putat(x, y, z, block);
 //                 fprintf(stderr, "x=%d, y=%d, z=%d, block=%d\n", x, y, z, block);
@@ -644,6 +652,39 @@ void gen_world()
         }
     }
 
+}
+
+void gravity() {
+    Sint32 x=0,y=0,z=0;
+    Uint8  block;
+    Uint8  above_block;
+    for (z=0; z<sizez-1; z++) {
+        for (y=0; y<sizey; y++) {
+            for (x=0; x<sizex; x++) {
+                block = getat(x, y, z);
+                // Drop down dirt randomly
+                if (rxrand(0x08) == 1) {
+                    if (block == ID_EMPTY
+                            || (block >= ID_SOIL_DRY_MIN && block < ID_SOIL_DRY_MAX))
+                    {
+                        above_block = getat(x, y, z+1);
+                        while (above_block >= ID_SOIL_DRY_MIN 
+                                && above_block <= ID_SOIL_DRY_MAX
+                                && (block<ID_SOIL_DRY_MAX || block == ID_EMPTY)) {
+                            if (above_block == ID_SOIL_DRY_MIN)
+                                above_block = 0xff;
+                            else
+                                above_block--;
+                            block++;
+                        }
+                        putat(x, y, z+1, above_block);
+                        putat(x, y, z, block);
+                    }
+                }
+//                 fprintf(stderr, "x=%d, y=%d, z=%d, block=%d\n", x, y, z, block);
+            }
+        }
+    }
 }
 
 void init_display_lists() {
@@ -729,7 +770,7 @@ int main(int argc, char * argv[])
 		case SDL_MOUSEMOTION:
 		    {
 			if (event.motion.xrel > -100 && event.motion.xrel < 100)
-			    angley+=event.motion.xrel/3.0;
+			    anglez+=event.motion.xrel/3.0;
 			if (event.motion.yrel > -100 && event.motion.yrel < 100)
 			    anglex+=event.motion.yrel/3.0;
 		    } break;
@@ -744,6 +785,11 @@ int main(int argc, char * argv[])
         if (keys['j'] || keys[SDLK_DOWN])  gridoy-=jumpsize;
         if (keys['h'] || keys[SDLK_LEFT])  gridox-=jumpsize;
         if (keys['l'] || keys[SDLK_RIGHT]) gridox+=jumpsize;
+
+
+        dtime_checkpoint();
+
+        gravity();
 
         dtime_checkpoint();
 
