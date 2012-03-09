@@ -1,5 +1,5 @@
 /*
-vi:ts=8
+vi:ts=8:sw=4:sts=4
  * Common tag list commands:
  * TlistToggle
  * TlistUpdate
@@ -111,6 +111,9 @@ int list_blocks;
 GLfloat gridx=20;
 GLfloat gridy=20;
 GLfloat gridz=20; // Not in use yet
+GLfloat anglex=-40.0;
+GLfloat angley=0.0;
+GLfloat anglez=0.0;
 Sint32 gridox=0; // Grid offset x
 Sint32 gridoy=0; // Grid offset y
 Sint32 gridoz=0;
@@ -447,12 +450,14 @@ void display_grid()
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity( );
-    glTranslatef( 0.4, -1.0, -6.6 );
-    glRotatef( -40., 1., 0., 0.0 );
+    glTranslatef( 0.4, -0.0, -6.6 );
+    glRotatef( anglex, 1., 0., 0.);
+    glRotatef( angley, 0., 1., 0.);
+    glRotatef( anglez, 0., 0., 1.);
 
     GLfloat m=(gridx > gridy ? gridx : gridy);
     glScalef(4./m, 4./m, 4./m);
-    glTranslatef( -m/2., -m/2., 0.0 );
+    glTranslatef( -m/2., -m/2., -m/2. );
 
     // Smoothly go to the current position of gridox/y
     // Stay within a window of 2*win boxes
@@ -707,16 +712,26 @@ int main(int argc, char * argv[])
 		case SDL_QUIT:
 		    running = 0;
 		    return 0;
-		case SDL_KEYDOWN: {
+		case SDL_KEYDOWN:
+		    {
 			key = event.key.keysym.sym;
-                        keys[key]=1;
+			keys[key]=1;
 			if (key == 27) running = 0;
 		    } break;
-		case SDL_KEYUP: {
+		case SDL_KEYUP:
+		    {
 			key = event.key.keysym.sym;
-                        keys[key]=0;
+			keys[key]=0;
 		    } break;
-		case SDL_VIDEORESIZE: {
+		case SDL_VIDEORESIZE:
+		    {
+		    } break;
+		case SDL_MOUSEMOTION:
+		    {
+			if (event.motion.xrel > -100 && event.motion.xrel < 100)
+			    angley+=event.motion.xrel/3.0;
+			if (event.motion.yrel > -100 && event.motion.yrel < 100)
+			    anglex+=event.motion.yrel/3.0;
 		    } break;
 	    }
 
