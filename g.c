@@ -79,11 +79,10 @@ vi:ts=8:sw=4:sts=4
 #include <GL/glu.h>
 #include <GL/glut.h>
 
-#define ID_SOIL_DRY_MIN 0x00
-#define ID_SOIL_DRY_MAX 0x03
-#define ID_SOIL_WET_MIN 0x04
-#define ID_SOIL_WET_MAX 0x07
-#define ID_WATER_MIN    0x08
+#define ID_SOIL_DRY 0x00
+#define ID_SOIL_DRY_MAX 0x00
+#define ID_SOIL_WET 0x01
+#define ID_WATER_MIN    0x02
 #define ID_WATER_MAX    0x0f
 #define ID_ROCK_HALF    0x10
 #define ID_ROCK_FULL    0x11
@@ -95,8 +94,9 @@ vi:ts=8:sw=4:sts=4
 #define ID_EMPTY        0xff
 
 #define CGUI            0xf0f0f0
-#define CSOIL_DRY       (97*256+52*16+49)
-#define CSOIL_WET       (78*256+73*16+68)
+#define CSOIL_DRY       0x7E3117
+#define CSOIL_WET       0x463E41
+#define CWATER          (78*256+73*16+68)
 
 Uint8 * plane = NULL;
 Uint32 pitch;     // *y = *y+pitch, lenght of a line
@@ -114,6 +114,9 @@ GLfloat gridz=20; // Not in use yet
 GLfloat anglex=-40.0;
 GLfloat angley=0.0;
 GLfloat anglez=0.0;
+GLfloat translatex= 0.4;
+GLfloat translatey= 0.0;
+GLfloat translatez=-7.0;
 Sint32 gridox=0; // Grid offset x
 Sint32 gridoy=0; // Grid offset y
 Sint32 gridoz=0;
@@ -121,6 +124,7 @@ Sint32 curposx;
 Sint32 curposy;
 Sint32 curposz;
 SDLKey keys[SDLK_LAST];
+Sint32 mousebuttons[6]; // 1=SDL_BUTTON_LEFT, 2=SDL_BUTTON_MIDDLE, 3=SDL_BUTTON_RIGHT, 4=SDL_BUTTON_WHEELUP, 5=SDL_BUTTON_WHEELDOWN
 Sint32 is_fullscreen = 0;
 #define out_buffer_size 2000
 char out_buffer[out_buffer_size];
@@ -460,7 +464,7 @@ void display_grid()
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity( );
-    glTranslatef( 0.4, -0.0, -6.6 );
+    glTranslatef( translatex, translatey, translatez );
     glRotatef( anglex, 1., 0., 0.);
     glRotatef( angley, 0., 1., 0.);
     glRotatef( anglez, 0., 0., 1.);
@@ -654,46 +658,74 @@ void gen_world()
 
 }
 
+/******************************************
+ * Purpose:
+ * 
+ * Blocks fall down if they can,
+ * i.e. dirt, water, ... but not rock
+ ******************************************/
 void gravity() {
     Sint32 x=0,y=0,z=0;
     Uint8  block;
     Uint8  above_block;
-    for (z=0; z<sizez-1; z++) {
-        for (y=0; y<sizey; y++) {
-            for (x=0; x<sizex; x++) {
+    const Sint32 step=0x8; // for testing, should probably be 0x02 or so
+    for (z=0; z<sizez-1; z+=rxrand(step)+1) {
+        for (y=0; y<sizey; y+=rxrand(step)+1) {
+            for (x=0; x<sizex; x+=rxrand(step)+1) {
                 block = getat(x, y, z);
-                // Drop down dirt randomly
-                if (rxrand(0x08) == 1) {
-                    if (block == ID_EMPTY
-                            || (block >= ID_SOIL_DRY_MIN && block < ID_SOIL_DRY_MAX))
+                if (block == ID_EMPTY) {
+                    above_block = getat(x, y, z+1);
+                    if (above_block == ID_SOIL_DRY 
+                            || above_block == ID_SOIL_WET
+                            || (above_block >= ID_WATER_MIN && above_block < ID_WATER_MAX))
                     {
-                        above_block = getat(x, y, z+1);
-                        while (above_block >= ID_SOIL_DRY_MIN 
-                                && above_block <= ID_SOIL_DRY_MAX
-                                && (block<ID_SOIL_DRY_MAX || block == ID_EMPTY)) {
-                            if (above_block == ID_SOIL_DRY_MIN)
-                                above_block = 0xff;
-                            else
-                                above_block--;
-                            block++;
-                        }
+                        block = above_block;
+                        above_block = ID_EMPTY;
                         putat(x, y, z+1, above_block);
                         putat(x, y, z, block);
                     }
+                } 
+                    
+                if(block >= ID_WATER_MIN && block < ID_WATER_MAX) {
+                    above_block = getat(x, y, z+1);
+
+                    // Make water drop down
+                    while (block >= ID_WATER_MIN
+                            && block < ID_WATER_MAX-1
+                            && above_block >= ID_WATER_MIN 
+                            && above_block < ID_WATER_MAX) {
+                        block++;
+                        if (above_block > ID_WATER_MIN)
+                            above_block--;
+                        else
+                            above_block = ID_EMPTY;
+
+                    }
+
+                    // Make other items drop down, water will go up
+                    if (above_block == ID_SOIL_DRY
+                            || above_block == ID_SOIL_WET
+                            || above_block == ID_ROCK_HALF
+                            || above_block == ID_ROCK_FULL) {
+                        Uint8 f=above_block;
+                        above_block = block;
+                        block = f;
+                    }
+
+                    putat(x, y, z+1, above_block);
+                    putat(x, y, z, block);
                 }
-//                 fprintf(stderr, "x=%d, y=%d, z=%d, block=%d\n", x, y, z, block);
             }
         }
     }
 }
 
 void init_display_lists() {
-#define ID_SOIL_DRY_MIN 0x00
-#define ID_SOIL_DRY_MAX 0x03
-#define ID_SOIL_WET_MIN 0x04
-#define ID_SOIL_WET_MAX 0x07
-#define ID_WATER_MIN    0x08
+#define ID_SOIL_DRY_MAX 0x00
+#define ID_SOIL_WET 0x01
+#define ID_WATER_MIN    0x02
 #define ID_WATER_MAX    0x0f
+#define ID_WATER_NUM    (ID_WATER_MAX-ID_WATER_MIN)
 #define ID_ROCK_HALF    0x10
 #define ID_ROCK_FULL    0x11
 #define ID_FREE_0       0x12
@@ -703,25 +735,16 @@ void init_display_lists() {
 #define ID_MAX          ID_TREE_MAX
 #define ID_EMPTY        0xff
 
-#define CGUI            0xf0f0f0
-//#define CSOIL_DRY       (97*256+52*16+49)
-// Sienna #define CSOIL_DRY       0xA0522D
-#define CSOIL_DRY       0x800000 // Maroon
-//#define CSOIL_WET       (78*256+73*16+68)
-// Saddle brown
-#define CSOIL_WET       0x8B4513
     list_blocks = glGenLists(256);
     int l=list_blocks;
+    int i;
 
-    glNewList(l+ID_SOIL_DRY_MIN  , GL_COMPILE); cube_right_height(CSOIL_DRY, 0.25); glEndList();
-    glNewList(l+ID_SOIL_DRY_MIN+1, GL_COMPILE); cube_right_height(CSOIL_DRY, 0.50); glEndList();
-    glNewList(l+ID_SOIL_DRY_MIN+2, GL_COMPILE); cube_right_height(CSOIL_DRY, 0.75); glEndList();
-    glNewList(l+ID_SOIL_DRY_MIN+3, GL_COMPILE); cube_right       (CSOIL_DRY      ); glEndList();
-
-    glNewList(l+ID_SOIL_WET_MIN  , GL_COMPILE); cube_right_height(CSOIL_WET, 0.25); glEndList();
-    glNewList(l+ID_SOIL_WET_MIN+1, GL_COMPILE); cube_right_height(CSOIL_WET, 0.50); glEndList();
-    glNewList(l+ID_SOIL_WET_MIN+2, GL_COMPILE); cube_right_height(CSOIL_WET, 0.75); glEndList();
-    glNewList(l+ID_SOIL_WET_MIN+3, GL_COMPILE); cube_right       (CSOIL_WET      ); glEndList();
+    glNewList(l+ID_SOIL_DRY, GL_COMPILE); cube_right(CSOIL_DRY); glEndList();
+    glNewList(l+ID_SOIL_WET, GL_COMPILE); cube_right(CSOIL_WET); glEndList();
+    
+    for (i=0; i<ID_WATER_NUM; i++) {
+        glNewList(l+ID_WATER_MIN+i, GL_COMPILE); cube_right_height(CWATER, (i+1)*1.0/ID_WATER_NUM); glEndList();
+    }
 
     glNewList(l+ID_EMPTY         , GL_COMPILE); glTranslatef( 1., 0., 0. );         glEndList();
 }
@@ -778,11 +801,37 @@ int main(int argc, char * argv[])
 		    } break;
 		case SDL_MOUSEMOTION:
 		    {
-			if (event.motion.xrel > -100 && event.motion.xrel < 100)
-			    anglez+=event.motion.xrel/3.0;
-			if (event.motion.yrel > -100 && event.motion.yrel < 100)
-			    anglex+=event.motion.yrel/3.0;
+                        if (mousebuttons[SDL_BUTTON_LEFT]) {
+                            if (event.motion.xrel > -100 && event.motion.xrel < 100)
+                                anglez+=event.motion.xrel/3.0;
+                            if (event.motion.yrel > -100 && event.motion.yrel < 100)
+                                anglex+=event.motion.yrel/3.0;
+                        }
 		    } break;
+                case SDL_MOUSEBUTTONUP:
+                    if (event.button.button >= 1 && event.button.button <= 5)
+                        mousebuttons[event.button.button] = 0;
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    {
+                        int button = event.button.button;
+                        if (button >= 1 && button <= 5)
+                            mousebuttons[button] = 1;
+                        // Zoom
+                        if (button == SDL_BUTTON_WHEELUP || button == SDL_BUTTON_WHEELDOWN) {
+                            if (button == SDL_BUTTON_WHEELUP) {
+                                translatez += 0.4;
+                                translatex -= 1.0*(event.button.x-win_sizex/2)/win_sizex;
+                                translatey += 1.0*(event.button.y-win_sizey/2)/win_sizey;
+                            }
+                            if (button == SDL_BUTTON_WHEELDOWN) {
+                                translatez -= 0.4;
+                                translatex -= 1.0*(event.button.x-win_sizex/2)/win_sizex;
+                                translatey += 1.0*(event.button.y-win_sizey/2)/win_sizey;
+                            }
+                        }
+                    }
+                    break;
 	    }
 
 	}
