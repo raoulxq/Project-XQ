@@ -79,19 +79,19 @@ vi:ts=8:sw=4:sts=4
 #include <GL/glu.h>
 #include <GL/glut.h>
 
-#define ID_SOIL_DRY 0x00
-#define ID_SOIL_WET 0x01
-#define ID_WATER_MIN    0x02
-#define ID_WATER_MAX    0x0f
+#define ID_EMPTY        0x00
+#define ID_SOIL_DRY     0x01
+#define ID_SOIL_WET     0x02
+#define ID_WATER_MIN    0x03
+#define ID_WATER_MAX    0x14
 #define ID_WATER_NUM    (ID_WATER_MAX-ID_WATER_MIN+1)
-#define ID_ROCK_HALF    0x10
-#define ID_ROCK_FULL    0x11
-#define ID_FREE_0       0x12
-#define ID_FREE_1       0x13
-#define ID_TREE_MIN     0x14
-#define ID_TREE_MAX     0x17
+#define ID_ROCK_HALF    0x15
+#define ID_ROCK_FULL    0x16
+#define ID_FREE_0       0x17
+#define ID_FREE_1       0x18
+#define ID_TREE_MIN     0x19
+#define ID_TREE_MAX     0x1c
 #define ID_MAX          ID_TREE_MAX
-#define ID_EMPTY        0xff
 
 #define IS_WATER(x) (x >=ID_WATER_MIN && x <= ID_WATER_MAX)
 #define IS_SOIL(x) (x == ID_SOIL_DRY || x == ID_SOIL_WET)
@@ -104,16 +104,16 @@ vi:ts=8:sw=4:sts=4
 Uint8 * plane = NULL;
 Uint32 pitch;     // *y = *y+pitch, lenght of a line
 Uint32 potch;     // *z = *z+potch, size of a plane
-Sint32 sizex=100; // Must be at least psheep.range
-Sint32 sizey=100; // Must be at least psheep.range
-Sint32 sizez=25;  // Not in use yet
+Sint32 sizex=30; // Must be at least psheep.range
+Sint32 sizey=30; // Must be at least psheep.range
+Sint32 sizez=20;  // Not in use yet
 Sint32 bytes_per_pixel=1;
 Sint32 win_sizex=1100;
 Sint32 win_sizey=1100;
 int list_blocks;
-GLfloat gridx=50;
-GLfloat gridy=50;
-GLfloat gridz=25; // Not in use yet
+GLfloat gridx=30;
+GLfloat gridy=30;
+GLfloat gridz=20; // Not in use yet
 GLfloat anglex=-40.0;
 GLfloat angley=0.0;
 GLfloat anglez=0.0;
@@ -653,15 +653,40 @@ void gen_world()
         for (y=0; y<sizey; y++) {
             for (x=0; x<sizex; x++) {
                 block = ID_EMPTY;
-                if (rxrand(0x4) == 1) block = ID_SOIL_DRY;
-                if (rxrand(0x20) == 1) block = ID_WATER_MIN+rxrand(ID_WATER_NUM);
-//                 if (z > sizez-3) block = ID_EMPTY;
-                block = ID_EMPTY;
+                if (rxrand(0x2) == 1) block = ID_SOIL_DRY;
+                if (rxrand(0x10) == 1) block = ID_WATER_MIN+rxrand(ID_WATER_NUM);
+                if (z > sizez-3) block = ID_EMPTY;
+//                 block = ID_EMPTY;
                 putat(x, y, z, block);
             }
         }
     }
 
+}
+
+Sint32 water_level(Uint8 block)
+{
+    if (block == ID_EMPTY   ) return 0;
+    if (block == ID_SOIL_DRY) return 0;
+    if (block == ID_SOIL_WET) return 1;
+    if (block >= ID_WATER_MIN && block <= ID_WATER_MAX) return 1+block-ID_WATER_MIN;
+    return -1;
+}
+
+Uint8 water_level_increase(Uint8 block) 
+{
+    if (block == ID_EMPTY   ) return ID_WATER_MIN;
+    if (block == ID_SOIL_DRY) return ID_SOIL_WET;
+    if (block >= ID_WATER_MIN && block < ID_WATER_MAX) return block+1;
+    return -2;
+}
+
+Uint8 water_level_decrease(Uint8 block) 
+{
+    if (block == ID_SOIL_WET ) return ID_SOIL_DRY;
+    if (block == ID_WATER_MIN) return ID_EMPTY;
+    if (block >  ID_WATER_MIN && block <= ID_WATER_MAX) return block-1;
+    return -2;
 }
 
 /******************************************
@@ -675,12 +700,14 @@ void gravity()
     Sint32 x=0,y=0,z=0;
     Uint8  block;
     Uint8  above_block;
+    Uint8  next_block;
+    Uint8  next_2_block;
     Uint8  diagonal_above_block;
     Uint8  diagonal_two_above_block;
 
-    Sint32 step=0x01; // for testing, should probably be 0x02 or so
+    Sint32 step=0x04; // for testing, should probably be 0x02 or so
     if (keys[SDLK_LSHIFT] || keys[SDLK_RSHIFT])
-        step = 0x8;
+        step = 0x1;
     for (z=0; z<sizez-1; z+=rxrand(step)+1) {
         for (y=0; y<sizey; y+=rxrand(step)+1) {
             for (x=0; x<sizex; x+=rxrand(step)+1) {
@@ -747,15 +774,29 @@ void gravity()
         x = rxrand(sizex);
         y = rxrand(sizey);
         z = rxrand(sizez-1);
-        Sint32 newx=x, newy=y;
+        Sint32 nextx=x, nexty=y;
+        Sint32 next2x=x, next2y=y;
+
         if (rxrand(2) == 1)
-            newy=y+1-2*rxrand(2);
+            nexty=absy(y+1-2*rxrand(2));
         else
-            newx=x+1-2*rxrand(2);
+            nextx=absx(x+1-2*rxrand(2));
+
+        while (next2x == x && next2y == y) {
+            next2x = absx(x-2+rxrand(5));
+            next2y = absy(y-2+rxrand(5));
+        }
+
         block = getat(x, y, z);
         above_block = getat(x, y, z+1);
-        diagonal_above_block = getat(newx, newy, z+1);
-        diagonal_two_above_block = getat(newx, newy, z+2);
+        next_block = getat(nextx, nexty, z);
+        next_2_block = getat(next2x, next2y, z);
+        diagonal_above_block = getat(nextx, nexty, z+1);
+        diagonal_two_above_block = getat(nextx, nexty, z+2);
+
+//         Sint32 wl_next_block  = water_level(next_block);
+        Sint32 wl_next_2_block  = water_level(next_2_block);
+        Sint32 wl_block = water_level(block);
 
         // TODO: "Horizontal" movement of water
 
@@ -785,29 +826,47 @@ void gravity()
             }
 
             putat(x, y, z, block);
-            putat(newx, newy, z+1, diagonal_above_block);
+            putat(nextx, nexty, z+1, diagonal_above_block);
+        }
+
+        // Water levelling out on the same level, if water_level(block) < water_level(next_block)
+        if (wl_next_2_block > 0
+                && wl_block >= 0
+                && block != ID_SOIL_WET
+                && wl_block < ID_WATER_NUM-1
+                && wl_next_2_block > wl_block+1)
+        {
+            wl_block++;
+            wl_next_2_block--;
+            block = water_level_increase(block);
+            next_2_block = water_level_decrease(next_2_block);
+            putat(x, y, z, block);
+            putat(next2x, next2y, z, next_2_block);
         }
 
         // If two blocks above and one left/right/forward/back is a dirt block, it moves down 
         // one diagonally
-        if (z < sizez-2 
-                && (block       == ID_EMPTY || IS_WATER(block))
-                && (above_block == ID_EMPTY || IS_WATER(above_block))) {
-            if (IS_SOIL(diagonal_two_above_block)) {
-                putat(x, y, z+1, diagonal_two_above_block);
-                putat(newx, newy, z+2, above_block);
+        if (z < sizez-1 
+                && (block       == ID_EMPTY || IS_WATER(block))) {
+            if (IS_SOIL(diagonal_above_block)) {
+                Uint8 f=diagonal_above_block;
+                diagonal_above_block = block;
+                block = f;
+                putat(x, y, z, block);
+                putat(nextx, nexty, z+1, diagonal_above_block);
             }
         }
     }
 
-    int j;
-    for (j=0; j<20; j++) {
-        putat(rxrand(sizex), gridy/2, sizez-1, ID_SOIL_DRY);
-        putat(gridx/2, rxrand(sizey), sizez-1, ID_WATER_MIN);
-    }
+//     int j;
+//     for (j=0; j<20; j++) {
+//         putat(rxrand(sizex), gridy/2, sizez-1, ID_SOIL_DRY);
+//         putat(gridx/2, rxrand(sizey), sizez-1, ID_WATER_MIN);
+//     }
 }
 
-void init_display_lists() {
+void init_display_lists()
+{
 // #define ID_SOIL_DRY 0x00
 // #define ID_SOIL_WET 0x01
 // #define ID_WATER_MIN    0x02
